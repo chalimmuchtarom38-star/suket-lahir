@@ -4,14 +4,15 @@ import openpyxl
 import os
 import io
 import re
+from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from pypdf import PdfReader, PdfWriter
 
 st.set_page_config(page_title="Form Suket Lahir", layout="wide")
 st.title("📋 Form Input Data - SUKET LAHIR")
 
 EXCEL_FILE = os.path.join(os.path.dirname(__file__), "SUKET LAHIR.xlsx")
+TEMPLATE_PDF = os.path.join(os.path.dirname(__file__), "template_f201.pdf")
 
 @st.cache_data
 def load_excel_data(file_path):
@@ -24,203 +25,132 @@ def get_val(df, r, c):
     except:
         return ""
 
-# --- AMBIL FILE EXCEL UTUH (TANPA MENGHAPUS SHEET APAPUN) ---
-def get_original_excel():
-    with open(EXCEL_FILE, "rb") as f:
-        return f.read()
+# --- FUNGSI UPDATE DATA EXCEL KETIKA FORM DIISI ---
+def update_excel_file(form_data):
+    wb = openpyxl.load_workbook(EXCEL_FILE)
+    
+    # 1. Update Sheet ISIAN DATA
+    if "ISIAN DATA" in wb.sheetnames:
+        ws_isian = wb["ISIAN DATA"]
+        ws_isian.cell(row=2, column=1, value=form_data["no_surat"])       # Row 2 (index 1)
+        ws_isian.cell(row=6, column=5, value=form_data["nama_kk"])        # Row 6 (index 5)
+        ws_isian.cell(row=7, column=5, value=form_data["no_kk"])          # Row 7 (index 6)
+        ws_isian.cell(row=11, column=5, value=form_data["nama_bayi"])     # Row 11 (index 10)
+        ws_isian.cell(row=12, column=5, value=form_data["jk_bayi"])       # Row 12 (index 11)
+        ws_isian.cell(row=25, column=5, value=form_data["nik_ibu"])       # Row 25 (index 24)
+        ws_isian.cell(row=37, column=5, value=form_data["nik_ayah"])      # Row 37 (index 36)
 
-# --- GENERATE PDF TANPA MENGUBAH / MENGHAPUS FILE EXCEL ---
-def generate_pdf_surat_kelahiran():
-    wb = openpyxl.load_workbook(EXCEL_FILE, data_only=True)
-    if "Surat Kelahiran" not in wb.sheetnames:
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return output
+
+# --- FUNGSI CETAK PDF SESUAI INPUT FORM ---
+def generate_pdf_from_inputs(form_data):
+    if not os.path.exists(TEMPLATE_PDF):
         return None
-        
-    ws = wb["Surat Kelahiran"]
-    
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(
-        buffer, 
-        pagesize=A4, 
-        rightMargin=15, 
-        leftMargin=15, 
-        topMargin=15, 
-        bottomMargin=15
-    )
-    
-    styles = getSampleStyleSheet()
-    normal_style = ParagraphStyle('Norm', parent=styles['Normal'], fontSize=7, leading=8)
-    bold_style = ParagraphStyle('BoldNorm', parent=styles['Normal'], fontSize=7, leading=8, fontName='Helvetica-Bold')
 
-    table_data = []
-    # Membaca isi dari sheet Surat Kelahiran
-    for r in range(1, 95):
-        row_cells = []
-        has_content = False
-        for c in range(1, 31):
-            val = ws.cell(row=r, column=c).value
-            txt = "" if val is None else str(val).strip()
-            if txt:
-                has_content = True
-            row_cells.append(txt)
-        
-        if has_content:
-            combined_text = "  ".join([t for t in row_cells if t])
-            if "SURAT KETERANGAN KELAHIRAN" in combined_text or "KODE.F-2.01" in combined_text:
-                table_data.append([Paragraph(f"<b>{combined_text}</b>", bold_style)])
-            else:
-                table_data.append([Paragraph(combined_text, normal_style)])
+    packet = io.BytesIO()
+    can = canvas.Canvas(packet, pagesize=A4)
+    can.setFont("Helvetica", 8)
 
-    pdf_table = Table(table_data, colWidths=[560])
-    pdf_table.setStyle(TableStyle([
-        ('VALIGN', (0,0), (-1,-1), 'TOP'),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 1),
-        ('TOPPADDING', (0,0), (-1,-1), 1),
-    ]))
+    # Menuliskan data hasil inputan ke PDF Template
+    can.drawString(380, 772, form_data["no_surat"])
+    can.drawString(150, 745, form_data["nama_kk"])
+    can.drawString(150, 730, form_data["no_kk"])
+    can.drawString(150, 700, form_data["nama_bayi"])
+    can.drawString(150, 685, form_data["jk_bayi"])
+    can.drawString(150, 560, form_data["nik_ibu"])
+    can.drawString(150, 430, form_data["nik_ayah"])
 
-    doc.build([pdf_table])
-    buffer.seek(0)
-    return buffer
+    can.save()
+    packet.seek(0)
+
+    new_pdf = PdfReader(packet)
+    existing_pdf = PdfReader(TEMPLATE_PDF)
+    output = PdfWriter()
+
+    page = existing_pdf.pages[0]
+    page.merge_page(new_pdf.pages[0])
+    output.add_page(page)
+
+    pdf_out = io.BytesIO()
+    output.write(pdf_out)
+    pdf_out.seek(0)
+    return pdf_out
 
 if not os.path.exists(EXCEL_FILE):
-    st.error(f"⚠️ File tidak ditemukan: {EXCEL_FILE}")
+    st.error(f"⚠️ File Excel tidak ditemukan: {EXCEL_FILE}")
 else:
     try:
         df = load_excel_data(EXCEL_FILE)
-        st.success("✅ Data ISIAN DATA berhasil dimuat!")
 
-        # Nama File Dinamis Berdasarkan Nama Bayi
-        nama_bayi_raw = get_val(df, 10, 4)
-        nama_bayi_clean = re.sub(r'[^a-zA-Z0-9_-]', '_', nama_bayi_raw).strip('_') if nama_bayi_raw else "BAYI"
+        # FORM INPUT DATA
+        st.subheader("📝 Input / Edit Data Form")
+        with st.form("form_suket_lengkap"):
+            c1, c2, c3 = st.columns(3)
+            with c1: 
+                no_surat = st.text_input("Nomor Surat", value=get_val(df, 1, 0))
+            with c2: 
+                nama_kk = st.text_input("Nama Kepala Keluarga", value=get_val(df, 5, 4))
+            with c3: 
+                no_kk = st.text_input("Nomor Kartu Keluarga (KK)", value=get_val(df, 6, 4))
 
+            c1, c2 = st.columns(2)
+            with c1: 
+                nama_bayi = st.text_input("Nama Bayi", value=get_val(df, 10, 4))
+            with c2: 
+                jk_bayi = st.text_input("Jenis Kelamin Bayi", value=get_val(df, 11, 4))
+
+            c1, c2 = st.columns(2)
+            with c1: 
+                nik_ibu = st.text_input("NIK Ibu", value=get_val(df, 23, 4))
+            with c2: 
+                nik_ayah = st.text_input("NIK Ayah", value=get_val(df, 35, 4))
+
+            submitted = st.form_submit_button("🔄 Perbarui Data & File")
+
+        # Struktur data dari inputan pengguna
+        form_data = {
+            "no_surat": no_surat,
+            "nama_kk": nama_kk,
+            "no_kk": no_kk,
+            "nama_bayi": nama_bayi,
+            "jk_bayi": jk_bayi,
+            "nik_ibu": nik_ibu,
+            "nik_ayah": nik_ayah
+        }
+
+        # Mengatur Nama File Hasil Unduhan
+        nama_bayi_clean = re.sub(r'[^a-zA-Z0-9_-]', '_', nama_bayi).strip('_') if nama_bayi else "BAYI"
         nama_file_excel = f"SUKET_LAHIR_{nama_bayi_clean}.xlsx"
         nama_file_pdf = f"Surat_Kelahiran_{nama_bayi_clean}.pdf"
+
+        st.divider()
+        st.subheader("📥 Unduh File Terbaru")
 
         col_dl1, col_dl2 = st.columns(2)
         with col_dl1:
             st.download_button(
-                label=f"📥 Download File Excel Utuh ({nama_file_excel})",
-                data=get_original_excel(),
+                label=f"📥 Download Excel Update ({nama_file_excel})",
+                data=update_excel_file(form_data),
                 file_name=nama_file_excel,
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True
             )
         
         with col_dl2:
-            st.download_button(
-                label=f"📄 Download PDF ({nama_file_pdf})",
-                data=generate_pdf_surat_kelahiran(),
-                file_name=nama_file_pdf,
-                mime="application/pdf",
-                use_container_width=True
-            )
-
-        st.divider()
-
-        # FORM ISIAN DATA (Hanya membaca & menampilkan data dari sheet ISIAN DATA)
-        with st.form("form_suket_lengkap"):
-            st.subheader("1. Header & Data Kepala Keluarga")
-            c1, c2, c3 = st.columns(3)
-            with c1: st.text_input("Nomor Surat", value=get_val(df, 1, 0))
-            with c2: st.text_input("Nama Kepala Keluarga", value=get_val(df, 5, 4))
-            with c3: st.text_input("Nomor Kartu Keluarga (KK)", value=get_val(df, 6, 4))
-
-            st.divider()
-
-            st.subheader("2. Data Bayi / Anak")
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                st.text_input("Nama Bayi", value=nama_bayi_raw)
-                st.text_input("Jenis Kelamin Bayi", value=get_val(df, 11, 4))
-                st.text_input("Tempat Kelahiran", value=get_val(df, 13, 4))
-            with c2:
-                st.text_input("Jam Lahir", value=get_val(df, 15, 4))
-                st.caption("Tanggal Lahir Bayi (TGL / BLN / THN / UMUR)")
-                cb1, cb2, cb3, cb4 = st.columns(4)
-                with cb1: st.text_input("Tgl", value=get_val(df, 15, 5), key="b_tgl")
-                with cb2: st.text_input("Bln", value=get_val(df, 15, 6), key="b_bln")
-                with cb3: st.text_input("Thn", value=get_val(df, 15, 7), key="b_thn")
-                with cb4: st.text_input("Umur", value=get_val(df, 15, 8), key="b_umur")
-                st.text_input("Kelahiran Ke-", value=get_val(df, 17, 4))
-            with c3:
-                st.text_input("Penolong Kelahiran", value=get_val(df, 18, 4))
-                st.text_input("Berat Bayi (Gram)", value=get_val(df, 19, 4))
-                st.text_input("Panjang Bayi (Cm)", value=get_val(df, 20, 4))
-
-            st.divider()
-
-            col_ibu, col_ayah = st.columns(2)
-            with col_ibu:
-                st.subheader("3. Data Ibu")
-                st.text_input("NIK Ibu", value=get_val(df, 23, 4))
-                st.text_input("Nama Lengkap Ibu", value=get_val(df, 24, 4))
-                st.caption("Tanggal Lahir Ibu (TGL / BLN / THN / UMUR)")
-                ci1, ci2, ci3, ci4 = st.columns(4)
-                with ci1: st.text_input("Tgl", value=get_val(df, 25, 5), key="i_tgl")
-                with ci2: st.text_input("Bln", value=get_val(df, 25, 6), key="i_bln")
-                with ci3: st.text_input("Thn", value=get_val(df, 25, 7), key="i_thn")
-                with ci4: st.text_input("Umur", value=get_val(df, 25, 8), key="i_umur")
-                st.text_input("Pekerjaan Ibu", value=get_val(df, 26, 4))
-                st.text_input("Alamat Ibu", value=get_val(df, 27, 4))
-                st.text_input("Kebangsaan Ibu", value=get_val(df, 31, 4))
-                st.caption("Tanggal Perkawinan (TGL / BLN / THN)")
-                cp1, cp2, cp3 = st.columns(3)
-                with cp1: st.text_input("Tgl Kawin", value=get_val(df, 33, 5))
-                with cp2: st.text_input("Bln Kawin", value=get_val(df, 33, 6))
-                with cp3: st.text_input("Thn Kawin", value=get_val(df, 33, 7))
-
-            with col_ayah:
-                st.subheader("4. Data Ayah")
-                st.text_input("NIK Ayah", value=get_val(df, 35, 4))
-                st.text_input("Nama Lengkap Ayah", value=get_val(df, 36, 4))
-                st.caption("Tanggal Lahir Ayah (TGL / BLN / THN / UMUR)")
-                ca1, ca2, ca3, ca4 = st.columns(4)
-                with ca1: st.text_input("Tgl", value=get_val(df, 38, 5), key="a_tgl")
-                with ca2: st.text_input("Bln", value=get_val(df, 38, 6), key="a_bln")
-                with ca3: st.text_input("Thn", value=get_val(df, 38, 7), key="a_thn")
-                with ca4: st.text_input("Umur", value=get_val(df, 38, 8), key="a_umur")
-                st.text_input("Pekerjaan Ayah", value=get_val(df, 38, 4))
-                st.text_input("Alamat Ayah", value=get_val(df, 39, 4))
-                st.text_input("Kebangsaan Ayah", value=get_val(df, 43, 4))
-
-            st.divider()
-
-            st.subheader("5. Data Pelapor")
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                st.text_input("NIK Pelapor", value=get_val(df, 46, 4))
-                st.text_input("Nama Lengkap Pelapor", value=get_val(df, 47, 4))
-            with c2:
-                st.text_input("Umur Pelapor", value=get_val(df, 48, 4))
-                st.text_input("Jenis Kelamin Pelapor", value=get_val(df, 49, 4))
-            with c3:
-                st.text_input("Pekerjaan Pelapor", value=get_val(df, 50, 4))
-                st.text_input("Alamat Pelapor", value=get_val(df, 51, 4))
-
-            st.divider()
-
-            col_s1, col_s2 = st.columns(2)
-            with col_s1:
-                st.subheader("6. Data Saksi I")
-                st.text_input("NIK Saksi I", value=get_val(df, 56, 4))
-                st.text_input("Nama Lengkap Saksi I", value=get_val(df, 57, 4))
-                st.text_input("Umur Saksi I", value=get_val(df, 58, 4))
-                st.text_input("Alamat Saksi I", value=get_val(df, 60, 4))
-
-            with col_s2:
-                st.subheader("7. Data Saksi II")
-                st.text_input("NIK Saksi II", value=get_val(df, 65, 4))
-                st.text_input("Nama Lengkap Saksi II", value=get_val(df, 66, 4))
-                st.text_input("Umur Saksi II", value=get_val(df, 67, 4))
-                st.text_input("Alamat Saksi II", value=get_val(df, 69, 4))
-
-            st.divider()
-
-            st.subheader("8. Keterangan Surat")
-            st.text_input("Tempat & Tanggal Surat", value=get_val(df, 71, 4))
-
-            btn = st.form_submit_button("Simpan Data")
-            if btn:
-                st.info("Form disimpan.")
+            pdf_data = generate_pdf_from_inputs(form_data)
+            if pdf_data:
+                st.download_button(
+                    label=f"📄 Download PDF Presisi ({nama_file_pdf})",
+                    data=pdf_data,
+                    file_name=nama_file_pdf,
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+            else:
+                st.warning("⚠️ Upload file `template_f201.pdf` untuk mengaktifkan fungsi PDF.")
 
     except Exception as e:
         st.error(f"Error: {e}")
