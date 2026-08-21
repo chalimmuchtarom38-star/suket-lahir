@@ -4,15 +4,11 @@ import openpyxl
 import os
 import io
 import re
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import A4
-from pypdf import PdfReader, PdfWriter
 
 st.set_page_config(page_title="Form Suket Lahir", layout="wide")
 st.title("📋 Form Input Data - SUKET LAHIR")
 
 EXCEL_FILE = os.path.join(os.path.dirname(__file__), "SUKET LAHIR.xlsx")
-TEMPLATE_PDF = os.path.join(os.path.dirname(__file__), "template_f201.pdf")
 
 @st.cache_data
 def load_excel_data(file_path):
@@ -100,46 +96,6 @@ def update_excel_file(fd):
     wb.save(output)
     output.seek(0)
     return output
-
-# --- FUNGSI GENERATE PDF PRESISI ---
-def generate_pdf_from_inputs(fd):
-    if not os.path.exists(TEMPLATE_PDF):
-        return None
-
-    packet = io.BytesIO()
-    can = canvas.Canvas(packet, pagesize=A4)
-    can.setFont("Helvetica", 8)
-
-    # Cetak data hasil form ke template PDF
-    can.drawString(380, 772, fd["no_surat"])
-    can.drawString(150, 745, fd["nama_kk"])
-    can.drawString(150, 730, fd["no_kk"])
-    can.drawString(150, 700, fd["nama_bayi"])
-    can.drawString(150, 685, fd["jk_bayi"])
-    can.drawString(150, 560, fd["nik_ibu"])
-    can.drawString(150, 545, fd["nama_ibu"])
-    can.drawString(150, 430, fd["nik_ayah"])
-    can.drawString(150, 415, fd["nama_ayah"])
-    can.drawString(150, 310, fd["nik_pelapor"])
-    can.drawString(150, 295, fd["nama_pelapor"])
-    can.drawString(420, 100, fd["tgl_surat"])
-    can.drawString(430, 40, fd["nama_pelapor"])
-
-    can.save()
-    packet.seek(0)
-
-    new_pdf = PdfReader(packet)
-    existing_pdf = PdfReader(TEMPLATE_PDF)
-    output = PdfWriter()
-
-    page = existing_pdf.pages[0]
-    page.merge_page(new_pdf.pages[0])
-    output.add_page(page)
-
-    pdf_out = io.BytesIO()
-    output.write(pdf_out)
-    pdf_out.seek(0)
-    return pdf_out
 
 if not os.path.exists(EXCEL_FILE):
     st.error(f"⚠️ File Excel tidak ditemukan: {EXCEL_FILE}")
@@ -271,33 +227,17 @@ else:
 
         nama_bayi_clean = re.sub(r'[^a-zA-Z0-9_-]', '_', nama_bayi).strip('_') if nama_bayi else "BAYI"
         nama_file_excel = f"SUKET_LAHIR_{nama_bayi_clean}.xlsx"
-        nama_file_pdf = f"Surat_Kelahiran_{nama_bayi_clean}.pdf"
 
         st.divider()
-        st.subheader("📥 Unduh Berkas Ter-update")
+        st.subheader("📥 Unduh Berkas Excel Ter-update")
 
-        col_dl1, col_dl2 = st.columns(2)
-        with col_dl1:
-            st.download_button(
-                label=f"📥 Download Excel Update ({nama_file_excel})",
-                data=update_excel_file(fd),
-                file_name=nama_file_excel,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
-            )
-        
-        with col_dl2:
-            pdf_data = generate_pdf_from_inputs(fd)
-            if pdf_data:
-                st.download_button(
-                    label=f"📄 Download PDF Presisi ({nama_file_pdf})",
-                    data=pdf_data,
-                    file_name=nama_file_pdf,
-                    mime="application/pdf",
-                    use_container_width=True
-                )
-            else:
-                st.warning("⚠️ Upload file `template_f201.pdf` untuk mengaktifkan fungsi PDF.")
+        st.download_button(
+            label=f"📥 Download File Excel Utuh ({nama_file_excel})",
+            data=update_excel_file(fd),
+            file_name=nama_file_excel,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
 
     except Exception as e:
         st.error(f"Error: {e}")
