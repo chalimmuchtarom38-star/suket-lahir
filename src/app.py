@@ -5,6 +5,7 @@ import os
 import io
 import subprocess
 import tempfile
+import re
 
 st.set_page_config(page_title="Form Suket Lahir", layout="wide")
 st.title("📋 Form Input Data - SUKET LAHIR")
@@ -22,7 +23,6 @@ def get_val(df, r, c):
     except:
         return ""
 
-# --- FUNGSI EXCEL ONLY SHEET SURAT KELAHIRAN ---
 def generate_excel_surat_kelahiran():
     wb = openpyxl.load_workbook(EXCEL_FILE, data_only=True)
     if "Surat Kelahiran" in wb.sheetnames:
@@ -34,9 +34,7 @@ def generate_excel_surat_kelahiran():
     output.seek(0)
     return output
 
-# --- FUNGSI PDF PRESISI 1:1 DENGAN LIBREOFFICE / EXCEL ---
 def generate_pdf_surat_kelahiran():
-    # Buat file Excel sementara yang hanya berisi sheet Surat Kelahiran
     with tempfile.TemporaryDirectory() as tmpdir:
         temp_excel_path = os.path.join(tmpdir, "temp_surat.xlsx")
         
@@ -47,7 +45,6 @@ def generate_pdf_surat_kelahiran():
                     del wb[sheet_name]
         wb.save(temp_excel_path)
 
-        # Konversi file Excel langsung ke PDF menggunakan LibreOffice
         try:
             subprocess.run([
                 "libreoffice", "--headless", "--convert-to", "pdf", 
@@ -60,8 +57,6 @@ def generate_pdf_surat_kelahiran():
             return io.BytesIO(pdf_data)
         
         except Exception as e:
-            # Fallback jika libreoffice tidak terpasang di sistem lokal
-            st.warning("Menampilkan opsi standar (LibreOffice tidak terdeteksi di lingkungan lokal).")
             return generate_excel_surat_kelahiran()
 
 if not os.path.exists(EXCEL_FILE):
@@ -71,28 +66,40 @@ else:
         df = load_excel_data(EXCEL_FILE)
         st.success("✅ Data siap!")
 
+        # --- AMBIL NAMA BAYI UNTUK NAMA FILE DINAMIS ---
+        nama_bayi_raw = get_val(df, 10, 4)
+        if not nama_bayi_raw:
+            nama_bayi_clean = "TANPA_NAMA"
+        else:
+            # Bersihkan karakter aneh agar aman jadi nama file
+            nama_bayi_clean = re.sub(r'[^a-zA-Z0-9_-]', '_', nama_bayi_raw).strip('_')
+
+        nama_file_excel = f"Surat_Kelahiran_{nama_bayi_clean}.xlsx"
+        nama_file_pdf = f"Surat_Kelahiran_{nama_bayi_clean}.pdf"
+
+        # --- TOMBOL DOWNLOAD DENGAN NAMA FILE DINAMIS ---
         col_dl1, col_dl2 = st.columns(2)
         with col_dl1:
             st.download_button(
-                label="📥 Download Excel (Surat Kelahiran)",
+                label=f"📥 Download Excel ({nama_file_excel})",
                 data=generate_excel_surat_kelahiran(),
-                file_name="Surat_Kelahiran.xlsx",
+                file_name=nama_file_excel,
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True
             )
         
         with col_dl2:
             st.download_button(
-                label="📄 Download PDF Resmi (Form F-2.01)",
+                label=f"📄 Download PDF ({nama_file_pdf})",
                 data=generate_pdf_surat_kelahiran(),
-                file_name="Surat_Keterangan_Kelahiran_F201.pdf",
+                file_name=nama_file_pdf,
                 mime="application/pdf",
                 use_container_width=True
             )
 
         st.divider()
 
-        # FORM ISIAN DATA
+        # --- FORM ISIAN DATA ---
         with st.form("form_suket_lengkap"):
             st.subheader("1. Header & Data Kepala Keluarga")
             c1, c2, c3 = st.columns(3)
@@ -105,7 +112,7 @@ else:
             st.subheader("2. Data Bayi / Anak")
             c1, c2, c3 = st.columns(3)
             with c1:
-                st.text_input("Nama Bayi", value=get_val(df, 10, 4))
+                st.text_input("Nama Bayi", value=nama_bayi_raw)
                 st.text_input("Jenis Kelamin Bayi", value=get_val(df, 11, 4))
                 st.text_input("Tempat Kelahiran", value=get_val(df, 13, 4))
             with c2:
