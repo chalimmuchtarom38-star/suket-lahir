@@ -5,9 +5,8 @@ import os
 import io
 import re
 from reportlab.lib.pagesizes import A4
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib import colors
 
 st.set_page_config(page_title="Form Suket Lahir", layout="wide")
 st.title("📋 Form Input Data - SUKET LAHIR")
@@ -25,20 +24,17 @@ def get_val(df, r, c):
     except:
         return ""
 
-def generate_excel_surat_kelahiran():
-    wb = openpyxl.load_workbook(EXCEL_FILE, data_only=True)
-    if "Surat Kelahiran" in wb.sheetnames:
-        for sheet_name in list(wb.sheetnames):
-            if sheet_name != "Surat Kelahiran":
-                del wb[sheet_name]
-    output = io.BytesIO()
-    wb.save(output)
-    output.seek(0)
-    return output
+# --- AMBIL FILE EXCEL UTUH (TANPA MENGHAPUS SHEET APAPUN) ---
+def get_original_excel():
+    with open(EXCEL_FILE, "rb") as f:
+        return f.read()
 
-# --- GENERATE PDF HANDLER RESMI (Pasti Terisi & Rapi) ---
+# --- GENERATE PDF TANPA MENGUBAH / MENGHAPUS FILE EXCEL ---
 def generate_pdf_surat_kelahiran():
     wb = openpyxl.load_workbook(EXCEL_FILE, data_only=True)
+    if "Surat Kelahiran" not in wb.sheetnames:
+        return None
+        
     ws = wb["Surat Kelahiran"]
     
     buffer = io.BytesIO()
@@ -56,7 +52,7 @@ def generate_pdf_surat_kelahiran():
     bold_style = ParagraphStyle('BoldNorm', parent=styles['Normal'], fontSize=7, leading=8, fontName='Helvetica-Bold')
 
     table_data = []
-    # Mengambil isi sel dari range A1:AD94
+    # Membaca isi dari sheet Surat Kelahiran
     for r in range(1, 95):
         row_cells = []
         has_content = False
@@ -67,7 +63,6 @@ def generate_pdf_surat_kelahiran():
                 has_content = True
             row_cells.append(txt)
         
-        # Gabungkan teks baris agar menjadi dokumen PDF yang utuh dan readable
         if has_content:
             combined_text = "  ".join([t for t in row_cells if t])
             if "SURAT KETERANGAN KELAHIRAN" in combined_text or "KODE.F-2.01" in combined_text:
@@ -91,20 +86,20 @@ if not os.path.exists(EXCEL_FILE):
 else:
     try:
         df = load_excel_data(EXCEL_FILE)
-        st.success("✅ Data siap!")
+        st.success("✅ Data ISIAN DATA berhasil dimuat!")
 
         # Nama File Dinamis Berdasarkan Nama Bayi
         nama_bayi_raw = get_val(df, 10, 4)
         nama_bayi_clean = re.sub(r'[^a-zA-Z0-9_-]', '_', nama_bayi_raw).strip('_') if nama_bayi_raw else "BAYI"
 
-        nama_file_excel = f"Surat_Kelahiran_{nama_bayi_clean}.xlsx"
+        nama_file_excel = f"SUKET_LAHIR_{nama_bayi_clean}.xlsx"
         nama_file_pdf = f"Surat_Kelahiran_{nama_bayi_clean}.pdf"
 
         col_dl1, col_dl2 = st.columns(2)
         with col_dl1:
             st.download_button(
-                label=f"📥 Download Excel ({nama_file_excel})",
-                data=generate_excel_surat_kelahiran(),
+                label=f"📥 Download File Excel Utuh ({nama_file_excel})",
+                data=get_original_excel(),
                 file_name=nama_file_excel,
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True
@@ -121,7 +116,7 @@ else:
 
         st.divider()
 
-        # FORM ISIAN DATA
+        # FORM ISIAN DATA (Hanya membaca & menampilkan data dari sheet ISIAN DATA)
         with st.form("form_suket_lengkap"):
             st.subheader("1. Header & Data Kepala Keluarga")
             c1, c2, c3 = st.columns(3)
