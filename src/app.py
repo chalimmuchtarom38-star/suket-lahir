@@ -3,11 +3,8 @@ import pandas as pd
 import openpyxl
 import os
 import io
-from reportlab.lib.pagesizes import A4, landscape
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.platypus import Paragraph
-from reportlab.lib import colors
+import subprocess
+import tempfile
 
 st.set_page_config(page_title="Form Suket Lahir", layout="wide")
 st.title("📋 Form Input Data - SUKET LAHIR")
@@ -25,6 +22,7 @@ def get_val(df, r, c):
     except:
         return ""
 
+# --- FUNGSI EXCEL ONLY SHEET SURAT KELAHIRAN ---
 def generate_excel_surat_kelahiran():
     wb = openpyxl.load_workbook(EXCEL_FILE, data_only=True)
     if "Surat Kelahiran" in wb.sheetnames:
@@ -36,51 +34,35 @@ def generate_excel_surat_kelahiran():
     output.seek(0)
     return output
 
-# --- FUNGSI PDF PRESISI PRINT AREA A1:AD94 ---
+# --- FUNGSI PDF PRESISI 1:1 DENGAN LIBREOFFICE / EXCEL ---
 def generate_pdf_surat_kelahiran():
-    wb = openpyxl.load_workbook(EXCEL_FILE, data_only=True)
-    ws = wb["Surat Kelahiran"]
-    
-    styles = getSampleStyleSheet()
-    cell_style = ParagraphStyle('CellText', parent=styles['Normal'], fontSize=6, leading=7)
+    # Buat file Excel sementara yang hanya berisi sheet Surat Kelahiran
+    with tempfile.TemporaryDirectory() as tmpdir:
+        temp_excel_path = os.path.join(tmpdir, "temp_surat.xlsx")
+        
+        wb = openpyxl.load_workbook(EXCEL_FILE, data_only=True)
+        if "Surat Kelahiran" in wb.sheetnames:
+            for sheet_name in list(wb.sheetnames):
+                if sheet_name != "Surat Kelahiran":
+                    del wb[sheet_name]
+        wb.save(temp_excel_path)
 
-    # Membaca tepat range A1:AD94 (Baris 1-94, Kolom 1-30)
-    table_data = []
-    for r in range(1, 95):
-        row_data = []
-        for c in range(1, 31): # Kolom 1 (A) sampai 30 (AD)
-            val = ws.cell(row=r, column=c).value
-            txt = "" if val is None else str(val).strip()
-            row_data.append(Paragraph(txt, cell_style) if txt else "")
-        table_data.append(row_data)
-
-    buffer = io.BytesIO()
-    # Kertas A4 Landscape agar 30 kolom muat sempurna
-    doc = SimpleDocTemplate(
-        buffer, 
-        pagesize=landscape(A4), 
-        rightMargin=10, 
-        leftMargin=10, 
-        topMargin=10, 
-        bottomMargin=10
-    )
-    
-    # Menyesuaikan lebar 30 kolom agar pas di kertas A4
-    col_widths = [26] * 30 
-    
-    pdf_table = Table(table_data, colWidths=col_widths)
-    pdf_table.setStyle(TableStyle([
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
-        ('TOPPADDING', (0, 0), (-1, -1), 0),
-        ('LEFTPADDING', (0, 0), (-1, -1), 1),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 1),
-    ]))
-
-    doc.build([pdf_table])
-    buffer.seek(0)
-    return buffer
+        # Konversi file Excel langsung ke PDF menggunakan LibreOffice
+        try:
+            subprocess.run([
+                "libreoffice", "--headless", "--convert-to", "pdf", 
+                "--outdir", tmpdir, temp_excel_path
+            ], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            
+            pdf_path = os.path.join(tmpdir, "temp_surat.pdf")
+            with open(pdf_path, "rb") as f:
+                pdf_data = f.read()
+            return io.BytesIO(pdf_data)
+        
+        except Exception as e:
+            # Fallback jika libreoffice tidak terpasang di sistem lokal
+            st.warning("Menampilkan opsi standar (LibreOffice tidak terdeteksi di lingkungan lokal).")
+            return generate_excel_surat_kelahiran()
 
 if not os.path.exists(EXCEL_FILE):
     st.error(f"⚠️ File tidak ditemukan: {EXCEL_FILE}")
@@ -92,7 +74,7 @@ else:
         col_dl1, col_dl2 = st.columns(2)
         with col_dl1:
             st.download_button(
-                label="📥 Download Excel (Sheet Surat Kelahiran)",
+                label="📥 Download Excel (Surat Kelahiran)",
                 data=generate_excel_surat_kelahiran(),
                 file_name="Surat_Kelahiran.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -101,9 +83,9 @@ else:
         
         with col_dl2:
             st.download_button(
-                label="📄 Download PDF (Print Area A1:AD94)",
+                label="📄 Download PDF Resmi (Form F-2.01)",
                 data=generate_pdf_surat_kelahiran(),
-                file_name="Surat_Kelahiran_A1_AD94.pdf",
+                file_name="Surat_Keterangan_Kelahiran_F201.pdf",
                 mime="application/pdf",
                 use_container_width=True
             )
