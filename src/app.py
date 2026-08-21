@@ -3,9 +3,11 @@ import pandas as pd
 import openpyxl
 import os
 import io
-import subprocess
-import tempfile
 import re
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
 
 st.set_page_config(page_title="Form Suket Lahir", layout="wide")
 st.title("📋 Form Input Data - SUKET LAHIR")
@@ -34,30 +36,55 @@ def generate_excel_surat_kelahiran():
     output.seek(0)
     return output
 
+# --- GENERATE PDF HANDLER RESMI (Pasti Terisi & Rapi) ---
 def generate_pdf_surat_kelahiran():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        temp_excel_path = os.path.join(tmpdir, "temp_surat.xlsx")
-        
-        wb = openpyxl.load_workbook(EXCEL_FILE, data_only=True)
-        if "Surat Kelahiran" in wb.sheetnames:
-            for sheet_name in list(wb.sheetnames):
-                if sheet_name != "Surat Kelahiran":
-                    del wb[sheet_name]
-        wb.save(temp_excel_path)
+    wb = openpyxl.load_workbook(EXCEL_FILE, data_only=True)
+    ws = wb["Surat Kelahiran"]
+    
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer, 
+        pagesize=A4, 
+        rightMargin=15, 
+        leftMargin=15, 
+        topMargin=15, 
+        bottomMargin=15
+    )
+    
+    styles = getSampleStyleSheet()
+    normal_style = ParagraphStyle('Norm', parent=styles['Normal'], fontSize=7, leading=8)
+    bold_style = ParagraphStyle('BoldNorm', parent=styles['Normal'], fontSize=7, leading=8, fontName='Helvetica-Bold')
 
-        try:
-            subprocess.run([
-                "libreoffice", "--headless", "--convert-to", "pdf", 
-                "--outdir", tmpdir, temp_excel_path
-            ], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            
-            pdf_path = os.path.join(tmpdir, "temp_surat.pdf")
-            with open(pdf_path, "rb") as f:
-                pdf_data = f.read()
-            return io.BytesIO(pdf_data)
+    table_data = []
+    # Mengambil isi sel dari range A1:AD94
+    for r in range(1, 95):
+        row_cells = []
+        has_content = False
+        for c in range(1, 31):
+            val = ws.cell(row=r, column=c).value
+            txt = "" if val is None else str(val).strip()
+            if txt:
+                has_content = True
+            row_cells.append(txt)
         
-        except Exception as e:
-            return generate_excel_surat_kelahiran()
+        # Gabungkan teks baris agar menjadi dokumen PDF yang utuh dan readable
+        if has_content:
+            combined_text = "  ".join([t for t in row_cells if t])
+            if "SURAT KETERANGAN KELAHIRAN" in combined_text or "KODE.F-2.01" in combined_text:
+                table_data.append([Paragraph(f"<b>{combined_text}</b>", bold_style)])
+            else:
+                table_data.append([Paragraph(combined_text, normal_style)])
+
+    pdf_table = Table(table_data, colWidths=[560])
+    pdf_table.setStyle(TableStyle([
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('BOTTOMPADDING', (0,0), (-1,-1), 1),
+        ('TOPPADDING', (0,0), (-1,-1), 1),
+    ]))
+
+    doc.build([pdf_table])
+    buffer.seek(0)
+    return buffer
 
 if not os.path.exists(EXCEL_FILE):
     st.error(f"⚠️ File tidak ditemukan: {EXCEL_FILE}")
@@ -66,18 +93,13 @@ else:
         df = load_excel_data(EXCEL_FILE)
         st.success("✅ Data siap!")
 
-        # --- AMBIL NAMA BAYI UNTUK NAMA FILE DINAMIS ---
+        # Nama File Dinamis Berdasarkan Nama Bayi
         nama_bayi_raw = get_val(df, 10, 4)
-        if not nama_bayi_raw:
-            nama_bayi_clean = "TANPA_NAMA"
-        else:
-            # Bersihkan karakter aneh agar aman jadi nama file
-            nama_bayi_clean = re.sub(r'[^a-zA-Z0-9_-]', '_', nama_bayi_raw).strip('_')
+        nama_bayi_clean = re.sub(r'[^a-zA-Z0-9_-]', '_', nama_bayi_raw).strip('_') if nama_bayi_raw else "BAYI"
 
         nama_file_excel = f"Surat_Kelahiran_{nama_bayi_clean}.xlsx"
         nama_file_pdf = f"Surat_Kelahiran_{nama_bayi_clean}.pdf"
 
-        # --- TOMBOL DOWNLOAD DENGAN NAMA FILE DINAMIS ---
         col_dl1, col_dl2 = st.columns(2)
         with col_dl1:
             st.download_button(
@@ -99,7 +121,7 @@ else:
 
         st.divider()
 
-        # --- FORM ISIAN DATA ---
+        # FORM ISIAN DATA
         with st.form("form_suket_lengkap"):
             st.subheader("1. Header & Data Kepala Keluarga")
             c1, c2, c3 = st.columns(3)
