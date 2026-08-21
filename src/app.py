@@ -1,36 +1,20 @@
 import streamlit as st
 import pandas as pd
 import os
-import glob
 
 st.set_page_config(page_title="Form Suket Lahir", layout="wide")
 st.title("📋 Form Input Data - SUKET LAHIR")
 
-# Fungsi untuk mencari file Excel secara otomatis (tidak sensitif huruf besar/kecil)
-def find_excel_file():
-    # Cari di folder data/ atau di root directory
-    possible_paths = [
-        "data/*.xlsx",
-        "data/*.xls",
-        "*.xlsx",
-        "*.xls"
-    ]
-    for path in possible_paths:
-        files = glob.glob(path)
-        for f in files:
-            if "suket" in f.lower() or "lahir" in f.lower():
-                return f
-    return None
+# Menunjuk langsung ke file Excel yang ada di dalam folder src
+EXCEL_FILE = os.path.join(os.path.dirname(__file__), "SUKET LAHIR.xlsx")
 
-excel_file = find_excel_file()
-
-if not excel_file:
-    st.error("⚠️ File Excel 'SUKET LAHIR.xlsx' tidak ditemukan di folder 'data/'. Pastikan file sudah di-upload ke GitHub!")
+if not os.path.exists(EXCEL_FILE):
+    st.error(f"⚠️ File tidak ditemukan di lokasi: {EXCEL_FILE}")
 else:
     try:
-        df = pd.read_excel(excel_file, sheet_name="ISIAN DATA", header=None)
+        df = pd.read_excel(EXCEL_FILE, sheet_name="ISIAN DATA", header=None)
         
-        st.success(f"File berhasil dimuat dari: `{excel_file}`")
+        st.success("Berhasil membaca data dari file Excel!")
         st.subheader("Data Utama")
         
         no_surat = st.text_input("Nomor Surat", value=str(df.iloc[0, 0]) if pd.notna(df.iloc[0, 0]) else "")
