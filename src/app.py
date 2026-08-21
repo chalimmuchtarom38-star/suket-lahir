@@ -3,16 +3,17 @@ import pandas as pd
 import openpyxl
 import os
 import io
-from reportlab.lib.pagesizes import A4
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.platypus import Paragraph
+from reportlab.lib import colors
 
 st.set_page_config(page_title="Form Suket Lahir", layout="wide")
 st.title("📋 Form Input Data - SUKET LAHIR")
 
 EXCEL_FILE = os.path.join(os.path.dirname(__file__), "SUKET LAHIR.xlsx")
 
-# --- CACHING AGAR BACA EXCEL SUPER Cepat ---
 @st.cache_data
 def load_excel_data(file_path):
     return pd.read_excel(file_path, sheet_name="ISIAN DATA", header=None)
@@ -24,7 +25,6 @@ def get_val(df, r, c):
     except:
         return ""
 
-# --- FUNGSI GENERATE EXCEL ---
 def generate_excel_surat_kelahiran():
     wb = openpyxl.load_workbook(EXCEL_FILE, data_only=True)
     if "Surat Kelahiran" in wb.sheetnames:
@@ -36,34 +36,49 @@ def generate_excel_surat_kelahiran():
     output.seek(0)
     return output
 
-# --- FUNGSI GENERATE PDF ---
+# --- FUNGSI PDF PRESISI PRINT AREA A1:AD94 ---
 def generate_pdf_surat_kelahiran():
     wb = openpyxl.load_workbook(EXCEL_FILE, data_only=True)
     ws = wb["Surat Kelahiran"]
     
-    data_grid = []
+    styles = getSampleStyleSheet()
+    cell_style = ParagraphStyle('CellText', parent=styles['Normal'], fontSize=6, leading=7)
+
+    # Membaca tepat range A1:AD94 (Baris 1-94, Kolom 1-30)
+    table_data = []
     for r in range(1, 95):
-        row_vals = []
-        for c in range(1, 31):
+        row_data = []
+        for c in range(1, 31): # Kolom 1 (A) sampai 30 (AD)
             val = ws.cell(row=r, column=c).value
-            row_vals.append("" if val is None else str(val))
-        if any(row_vals):
-            clean_text = " ".join([v for v in row_vals if v.strip()])
-            data_grid.append([clean_text])
+            txt = "" if val is None else str(val).strip()
+            row_data.append(Paragraph(txt, cell_style) if txt else "")
+        table_data.append(row_data)
 
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=20, leftMargin=20, topMargin=20, bottomMargin=20)
-    styles = getSampleStyleSheet()
+    # Kertas A4 Landscape agar 30 kolom muat sempurna
+    doc = SimpleDocTemplate(
+        buffer, 
+        pagesize=landscape(A4), 
+        rightMargin=10, 
+        leftMargin=10, 
+        topMargin=10, 
+        bottomMargin=10
+    )
     
-    story = []
-    style_text = ParagraphStyle('Custom', parent=styles['Normal'], fontSize=9, leading=12)
+    # Menyesuaikan lebar 30 kolom agar pas di kertas A4
+    col_widths = [26] * 30 
+    
+    pdf_table = Table(table_data, colWidths=col_widths)
+    pdf_table.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+        ('TOPPADDING', (0, 0), (-1, -1), 0),
+        ('LEFTPADDING', (0, 0), (-1, -1), 1),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 1),
+    ]))
 
-    for item in data_grid:
-        if item[0]:
-            story.append(Paragraph(item[0], style_text))
-            story.append(Spacer(1, 3))
-
-    doc.build(story)
+    doc.build([pdf_table])
     buffer.seek(0)
     return buffer
 
@@ -74,7 +89,6 @@ else:
         df = load_excel_data(EXCEL_FILE)
         st.success("✅ Data siap!")
 
-        # --- TOMBOL DOWNLOAD DIPERCEPAT ---
         col_dl1, col_dl2 = st.columns(2)
         with col_dl1:
             st.download_button(
@@ -87,16 +101,16 @@ else:
         
         with col_dl2:
             st.download_button(
-                label="📄 Download PDF (Surat Kelahiran)",
+                label="📄 Download PDF (Print Area A1:AD94)",
                 data=generate_pdf_surat_kelahiran(),
-                file_name="Surat_Kelahiran.pdf",
+                file_name="Surat_Kelahiran_A1_AD94.pdf",
                 mime="application/pdf",
                 use_container_width=True
             )
 
         st.divider()
 
-        # --- FORM ISIAN DATA ---
+        # FORM ISIAN DATA
         with st.form("form_suket_lengkap"):
             st.subheader("1. Header & Data Kepala Keluarga")
             c1, c2, c3 = st.columns(3)
