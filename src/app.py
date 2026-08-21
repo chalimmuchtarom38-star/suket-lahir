@@ -24,7 +24,43 @@ def get_val(df, r, c):
     except:
         return ""
 
-# --- FUNGSI UPDATE SELURUH DATA KE EXCEL ---
+# --- LOGIKA HITUNG UMUR OTOMATIS (CALLBACK) ---
+def update_umur_bayi():
+    tgl = st.session_state.get("b_tgl", "")
+    bln = st.session_state.get("b_bln", "")
+    thn = st.session_state.get("b_thn", "")
+    
+    if thn.isdigit():
+        try:
+            d_b = int(tgl) if tgl.isdigit() else 1
+            m_b = int(bln) if bln.isdigit() else 1
+            y_b = int(thn)
+            tgl_lahir = datetime.date(y_b, m_b, d_b)
+            selisih_hari = (TODAY - tgl_lahir).days
+
+            if selisih_hari >= 0:
+                if selisih_hari < 30:
+                    st.session_state["b_umur"] = f"{selisih_hari} Hari"
+                elif selisih_hari < 365:
+                    st.session_state["b_umur"] = f"{selisih_hari // 30} Bulan"
+                else:
+                    st.session_state["b_umur"] = f"{CURRENT_YEAR - y_b} Tahun"
+            else:
+                st.session_state["b_umur"] = "0 Hari"
+        except:
+            st.session_state["b_umur"] = str(CURRENT_YEAR - int(thn)) if thn.isdigit() else ""
+
+def update_umur_ibu():
+    thn = st.session_state.get("i_thn", "")
+    if thn.isdigit():
+        st.session_state["i_umur"] = str(CURRENT_YEAR - int(thn))
+
+def update_umur_ayah():
+    thn = st.session_state.get("a_thn", "")
+    if thn.isdigit():
+        st.session_state["a_umur"] = str(CURRENT_YEAR - int(thn))
+
+# --- FUNGSI UPDATE EXCEL ---
 def update_excel_file(fd):
     wb = openpyxl.load_workbook(EXCEL_FILE)
     if "ISIAN DATA" in wb.sheetnames:
@@ -106,9 +142,17 @@ else:
     try:
         df = load_excel_data(EXCEL_FILE)
 
+        # Inisialisasi Session State dari Excel jika belum ada
+        if "b_umur" not in st.session_state:
+            st.session_state["b_umur"] = get_val(df, 15, 8)
+        if "i_umur" not in st.session_state:
+            st.session_state["i_umur"] = get_val(df, 25, 8)
+        if "a_umur" not in st.session_state:
+            st.session_state["a_umur"] = get_val(df, 38, 8)
+
         st.subheader("📝 Form Isian Data SUKET LAHIR")
         
-        # --- 1. Header & Data Kepala Keluarga ---
+        # --- 1. Header & Data KK ---
         st.markdown("##### 1. Header & Data Kepala Keluarga")
         c1, c2, c3 = st.columns(3)
         with c1: no_surat = st.text_input("Nomor Surat", value=get_val(df, 1, 0))
@@ -128,34 +172,11 @@ else:
             jam_lahir_b = st.text_input("Jam Lahir", value=get_val(df, 15, 4))
             st.caption("Tanggal Lahir Bayi (TGL / BLN / THN / UMUR)")
             cb1, cb2, cb3, cb4 = st.columns(4)
-            with cb1: tgl_b = st.text_input("Tgl", value=get_val(df, 15, 5), key="b_tgl")
-            with cb2: bln_b = st.text_input("Bln", value=get_val(df, 15, 6), key="b_bln")
-            with cb3: thn_b = st.text_input("Thn", value=get_val(df, 15, 7), key="b_thn")
+            with cb1: tgl_b = st.text_input("Tgl", value=get_val(df, 15, 5), key="b_tgl", on_change=update_umur_bayi)
+            with cb2: bln_b = st.text_input("Bln", value=get_val(df, 15, 6), key="b_bln", on_change=update_umur_bayi)
+            with cb3: thn_b = st.text_input("Thn", value=get_val(df, 15, 7), key="b_thn", on_change=update_umur_bayi)
+            with cb4: umur_b = st.text_input("Umur", key="b_umur")
             
-            # Hitung Umur Bayi Langsung
-            default_umur_b = get_val(df, 15, 8)
-            calc_b = default_umur_b
-            if thn_b.isdigit():
-                try:
-                    d_b = int(tgl_b) if tgl_b.isdigit() else 1
-                    m_b = int(bln_b) if bln_b.isdigit() else 1
-                    y_b = int(thn_b)
-                    tgl_lahir_bayi = datetime.date(y_b, m_b, d_b)
-                    selisih_hari = (TODAY - tgl_lahir_bayi).days
-
-                    if selisih_hari >= 0:
-                        if selisih_hari < 30:
-                            calc_b = f"{selisih_hari} Hari"
-                        elif selisih_hari < 365:
-                            calc_b = f"{selisih_hari // 30} Bulan"
-                        else:
-                            calc_b = f"{CURRENT_YEAR - y_b} Tahun"
-                    else:
-                        calc_b = "0 Hari"
-                except:
-                    calc_b = str(CURRENT_YEAR - int(thn_b)) if thn_b.isdigit() else default_umur_b
-
-            with cb4: umur_b = st.text_input("Umur", value=calc_b, key="b_umur")
             kelahiran_ke = st.text_input("Kelahiran Ke-", value=get_val(df, 17, 4))
         with c3:
             penolong = st.text_input("Penolong Kelahiran", value=get_val(df, 18, 4))
@@ -174,13 +195,8 @@ else:
             ci1, ci2, ci3, ci4 = st.columns(4)
             with ci1: tgl_i = st.text_input("Tgl", value=get_val(df, 25, 5), key="i_tgl")
             with ci2: bln_i = st.text_input("Bln", value=get_val(df, 25, 6), key="i_bln")
-            with ci3: thn_i = st.text_input("Thn", value=get_val(df, 25, 7), key="i_thn")
-            
-            # Hitung Umur Ibu Langsung
-            default_umur_i = get_val(df, 25, 8)
-            calc_i = str(CURRENT_YEAR - int(thn_i)) if thn_i.isdigit() else default_umur_i
-
-            with ci4: umur_i = st.text_input("Umur", value=calc_i, key="i_umur")
+            with ci3: thn_i = st.text_input("Thn", value=get_val(df, 25, 7), key="i_thn", on_change=update_umur_ibu)
+            with ci4: umur_i = st.text_input("Umur", key="i_umur")
             
             pekerjaan_i = st.text_input("Pekerjaan Ibu", value=get_val(df, 26, 4))
             alamat_i = st.text_input("Alamat Ibu", value=get_val(df, 27, 4))
@@ -199,13 +215,8 @@ else:
             ca1, ca2, ca3, ca4 = st.columns(4)
             with ca1: tgl_a = st.text_input("Tgl", value=get_val(df, 38, 5), key="a_tgl")
             with ca2: bln_a = st.text_input("Bln", value=get_val(df, 38, 6), key="a_bln")
-            with ca3: thn_a = st.text_input("Thn", value=get_val(df, 38, 7), key="a_thn")
-            
-            # Hitung Umur Ayah Langsung
-            default_umur_a = get_val(df, 38, 8)
-            calc_a = str(CURRENT_YEAR - int(thn_a)) if thn_a.isdigit() else default_umur_a
-
-            with ca4: umur_a = st.text_input("Umur", value=calc_a, key="a_umur")
+            with ca3: thn_a = st.text_input("Thn", value=get_val(df, 38, 7), key="a_thn", on_change=update_umur_ayah)
+            with ca4: umur_a = st.text_input("Umur", key="a_umur")
 
             pekerjaan_a = st.text_input("Pekerjaan Ayah", value=get_val(df, 38, 4))
             alamat_a = st.text_input("Alamat Ayah", value=get_val(df, 39, 4))
