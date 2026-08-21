@@ -4,11 +4,14 @@ import openpyxl
 import os
 import io
 import re
+import datetime
 
 st.set_page_config(page_title="Form Suket Lahir", layout="wide")
 st.title("📋 Form Input Data - SUKET LAHIR")
 
 EXCEL_FILE = os.path.join(os.path.dirname(__file__), "SUKET LAHIR.xlsx")
+TODAY = datetime.date.today()
+CURRENT_YEAR = TODAY.year
 
 @st.cache_data
 def load_excel_data(file_path):
@@ -126,7 +129,31 @@ else:
                 with cb1: tgl_b = st.text_input("Tgl", value=get_val(df, 15, 5), key="b_tgl")
                 with cb2: bln_b = st.text_input("Bln", value=get_val(df, 15, 6), key="b_bln")
                 with cb3: thn_b = st.text_input("Thn", value=get_val(df, 15, 7), key="b_thn")
-                with cb4: umur_b = st.text_input("Umur", value=get_val(df, 15, 8), key="b_umur")
+                
+                # Hitung Umur Bayi Otomatis
+                default_umur_b = get_val(df, 15, 8)
+                calc_b = default_umur_b
+                if thn_b.isdigit():
+                    try:
+                        d_b = int(tgl_b) if tgl_b.isdigit() else 1
+                        m_b = int(bln_b) if bln_b.isdigit() else 1
+                        y_b = int(thn_b)
+                        tgl_lahir_bayi = datetime.date(y_b, m_b, d_b)
+                        selisih_hari = (TODAY - tgl_lahir_bayi).days
+
+                        if selisih_hari >= 0:
+                            if selisih_hari < 30:
+                                calc_b = f"{selisih_hari} Hari"
+                            elif selisih_hari < 365:
+                                calc_b = f"{selisih_hari // 30} Bulan"
+                            else:
+                                calc_b = f"{CURRENT_YEAR - y_b} Tahun"
+                        else:
+                            calc_b = "0 Hari"
+                    except:
+                        calc_b = str(CURRENT_YEAR - int(thn_b)) if thn_b.isdigit() else default_umur_b
+
+                with cb4: umur_b = st.text_input("Umur", value=calc_b, key="b_umur")
                 kelahiran_ke = st.text_input("Kelahiran Ke-", value=get_val(df, 17, 4))
             with c3:
                 penolong = st.text_input("Penolong Kelahiran", value=get_val(df, 18, 4))
@@ -145,7 +172,16 @@ else:
                 with ci1: tgl_i = st.text_input("Tgl", value=get_val(df, 25, 5), key="i_tgl")
                 with ci2: bln_i = st.text_input("Bln", value=get_val(df, 25, 6), key="i_bln")
                 with ci3: thn_i = st.text_input("Thn", value=get_val(df, 25, 7), key="i_thn")
-                with ci4: umur_i = st.text_input("Umur", value=get_val(df, 25, 8), key="i_umur")
+                
+                # Hitung Umur Ibu Otomatis jika Thn diisi
+                default_umur_i = get_val(df, 25, 8)
+                if thn_i.isdigit():
+                    calc_i = str(CURRENT_YEAR - int(thn_i))
+                else:
+                    calc_i = default_umur_i
+
+                with ci4: umur_i = st.text_input("Umur", value=calc_i, key="i_umur")
+                
                 pekerjaan_i = st.text_input("Pekerjaan Ibu", value=get_val(df, 26, 4))
                 alamat_i = st.text_input("Alamat Ibu", value=get_val(df, 27, 4))
                 kebangsaan_i = st.text_input("Kebangsaan Ibu", value=get_val(df, 31, 4))
@@ -164,7 +200,16 @@ else:
                 with ca1: tgl_a = st.text_input("Tgl", value=get_val(df, 38, 5), key="a_tgl")
                 with ca2: bln_a = st.text_input("Bln", value=get_val(df, 38, 6), key="a_bln")
                 with ca3: thn_a = st.text_input("Thn", value=get_val(df, 38, 7), key="a_thn")
-                with ca4: umur_a = st.text_input("Umur", value=get_val(df, 38, 8), key="a_umur")
+                
+                # Hitung Umur Ayah Otomatis jika Thn diisi
+                default_umur_a = get_val(df, 38, 8)
+                if thn_a.isdigit():
+                    calc_a = str(CURRENT_YEAR - int(thn_a))
+                else:
+                    calc_a = default_umur_a
+
+                with ca4: umur_a = st.text_input("Umur", value=calc_a, key="a_umur")
+
                 pekerjaan_a = st.text_input("Pekerjaan Ayah", value=get_val(df, 38, 4))
                 alamat_a = st.text_input("Alamat Ayah", value=get_val(df, 39, 4))
                 kebangsaan_a = st.text_input("Kebangsaan Ayah", value=get_val(df, 43, 4))
